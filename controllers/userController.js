@@ -231,3 +231,89 @@ exports.resetPassword = async (req, res) => {
     sendResponse(res, 500, false, 'Server error', null, err.message);
   }
 };
+
+exports.changePassword = async (req, res) => {
+  try {
+    const userId = req.user?.id; // verifyToken middleware se aa raha hai
+    const { oldPassword, newPassword, confirmNewPassword } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
+    if (!oldPassword || !newPassword || !confirmNewPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Old password, new password and confirm password are required'
+      });
+    }
+
+    if (newPassword !== confirmNewPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'New password and confirm password do not match'
+      });
+    }
+
+    const user = await User.findByPk(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const isMatch = await bcrypt.compare(oldPassword, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ success: false, message: 'Old password is incorrect' });
+    }
+
+    const hashed = await bcrypt.hash(newPassword, 10);
+    user.password = hashed;
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Password changed successfully'
+    });
+  } catch (error) {
+    console.error('Change password error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+exports.getAllTradesmen = async (req, res) => {
+  try {
+    const tradesmen = await User.findAll({ where: { role: 'tradesman' } });
+
+    if (!tradesmen || tradesmen.length === 0) {
+      return res.status(404).json({ success: false, message: 'No tradesmen found' });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Tradesmen fetched successfully',
+      data: tradesmen
+    });
+  } catch (error) {
+    console.error('Get tradesmen error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+exports.getAllClients = async (req, res) => {
+  try {
+    const clients = await User.findAll({ where: { role: 'client' } });
+
+    if (!clients || clients.length === 0) {
+      return res.status(404).json({ success: false, message: 'No clients found' });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Clients fetched successfully',
+      data: clients
+    });
+  } catch (error) {
+    console.error('Get clients error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
