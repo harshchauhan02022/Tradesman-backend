@@ -2,9 +2,19 @@ const express = require('express');
 const router = express.Router();
 const userController = require('../controllers/userController');
 const { verifyToken } = require('../middlewares/authMiddleware');
+const upload = require('../middlewares/uploadMiddleware');
 
 // Public Routes
-router.post('/register', userController.register);
+router.post(
+    '/register',
+    upload.fields([
+        { name: 'profileImage', maxCount: 1 },
+        { name: 'licenseDocument', maxCount: 1 },
+        { name: 'portfolioPhotos', maxCount: 10 },
+    ]),
+    userController.register
+);
+
 router.post('/login', userController.login);
 
 // 🔹 Custom Get Routes (must be above /:id)

@@ -12,6 +12,9 @@ require('./config/passport');
 const adminRoutes = require('./routes/adminRoutes');
 const userRoutes = require('./routes/userRoutes');
 const googleRoutes = require('./routes/googleRoutes');
+const hireRoutes = require('./routes/hireRoutes')
+const travelPlanRoutes = require("./routes/travelPlanRoutes");
+const subscriptionRoutes = require("./routes/subscriptionRoutes");
 
 const app = express();
 
@@ -32,6 +35,9 @@ app.use(passport.session());
 app.use('/api/admin', adminRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/auth', googleRoutes);
+app.use('/api/hire', hireRoutes);
+app.use("/api/travel-plans", travelPlanRoutes);
+app.use("/api/subscriptions", subscriptionRoutes);
 
 app.get('/', (req, res) => {
   res.send('✅ Tradesman Travel App API is running...');

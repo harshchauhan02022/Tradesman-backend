@@ -5,10 +5,10 @@ const User = require("./User");
 const TradesmanDetails = sequelize.define(
   "TradesmanDetails",
   {
-    id: { 
-      type: DataTypes.INTEGER, 
-      primaryKey: true, 
-      autoIncrement: true 
+    id: {
+      type: DataTypes.INTEGER,
+      primaryKey: true,
+      autoIncrement: true
     },
 
     userId: {
@@ -17,41 +17,41 @@ const TradesmanDetails = sequelize.define(
       allowNull: false,
     },
 
-    tradeType: { 
-      type: DataTypes.STRING 
+    tradeType: {
+      type: DataTypes.STRING
     },
 
-    businessName: { 
-      type: DataTypes.STRING 
+    businessName: {
+      type: DataTypes.STRING
     },
 
-    shortBio: { 
-      type: DataTypes.TEXT 
+    shortBio: {
+      type: DataTypes.TEXT
     },
 
-    licenseNumber: { 
-      type: DataTypes.STRING 
+    licenseNumber: {
+      type: DataTypes.STRING
     },
 
-    licenseExpiry: { 
-      type: DataTypes.DATE 
+    licenseExpiry: {
+      type: DataTypes.DATE
     },
 
-    licenseDocument: { 
-      type: DataTypes.STRING 
+    licenseDocument: {
+      type: DataTypes.STRING
     },
 
-    portfolioPhotos: { 
-      type: DataTypes.JSON 
+    portfolioPhotos: {
+      type: DataTypes.JSON
     },
 
-    portfolioDescription: { 
-      type: DataTypes.TEXT 
+    portfolioDescription: {
+      type: DataTypes.TEXT
     },
 
-    isApproved: { 
-      type: DataTypes.BOOLEAN, 
-      defaultValue: false 
+    isApproved: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false
     }
   },
   {

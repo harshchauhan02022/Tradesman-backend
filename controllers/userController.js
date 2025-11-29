@@ -1,5 +1,7 @@
 const User = require('../models/User');
 const TradesmanDetails = require("../models/TradesmanDetails");
+const SubscriptionPlan = require("../models/SubscriptionPlan");
+const UserSubscription = require("../models/UserSubscription");
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { Op } = require('sequelize');
@@ -13,7 +15,7 @@ const sendResponse = (res, statusCode, success, message, data = null, error = nu
 
 const signToken = (user) => {
   return jwt.sign(
-    { id: user.id, email: user.email },
+    { id: user.id, email: user.email, role: user.role },   // 👈 role bhi bhej diya
     process.env.JWT_SECRET,
     { expiresIn: '7d' }
   );
@@ -26,7 +28,7 @@ exports.register = async (req, res) => {
       email,
       mobile,
       password,
-      role,
+      role,              // "tradesman" | "client"
 
       // Tradesman-only fields
       tradeType,
@@ -37,16 +39,13 @@ exports.register = async (req, res) => {
       licenseDocument,
     } = req.body;
 
-    // Check existing user
     const isExist = await User.findOne({ where: { email } });
     if (isExist) {
       return sendResponse(res, 400, false, "User already exists");
     }
 
-    // Hash password
     const hashedPass = await bcrypt.hash(password, 10);
 
-    // Create user in Users table
     const user = await User.create({
       name,
       email,
@@ -55,7 +54,7 @@ exports.register = async (req, res) => {
       role,
     });
 
-    // If Tradesman => Create TradesmanDetails row
+    // Tradesman details
     if (role === "tradesman") {
       await TradesmanDetails.create({
         userId: user.id,
@@ -66,41 +65,63 @@ exports.register = async (req, res) => {
         licenseExpiry,
         licenseDocument,
       });
+
+      // 👉 default subscription: Free Trial
+      const freePlan = await SubscriptionPlan.findOne({
+        where: { isDefault: true },
+      });
+
+      if (freePlan) {
+        await UserSubscription.create({
+          userId: user.id,
+          planId: freePlan.id,
+          startDate: new Date(),
+          status: "active",
+        });
+      }
     }
 
     return sendResponse(res, 201, true, "User registered successfully", user);
-
   } catch (error) {
     console.error("Register Error:", error);
     return sendResponse(res, 500, false, "Server error");
   }
 };
 
+
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
     const user = await User.findOne({ where: { email } });
-    if (!user) return sendResponse(res, 400, false, "Invalid email or password");
+    if (!user) {
+      return res.status(400).json({ success: false, message: 'Invalid email or password' });
+    }
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return sendResponse(res, 400, false, "Invalid email or password");
+    if (!isMatch) {
+      return res.status(400).json({ success: false, message: 'Invalid email or password' });
+    }
 
     const token = signToken(user);
 
-    return sendResponse(res, 200, true, "Login successful", {
-      token,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
+    return res.status(200).json({
+      success: true,
+      message: 'Login successful',
+      data: {
+        token,
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+        }
       }
     });
 
   } catch (error) {
     console.error("Login Error:", error);
-    return sendResponse(res, 500, false, "Server error");
+    return res.status(500).json({ success: false, message: 'Server error' });
   }
 };
 
