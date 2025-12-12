@@ -5,16 +5,16 @@ const router = express.Router();
 const { verifyAdminToken } = require('../middlewares/adminAuthMiddleware');
 const tradesmanApprovalController = require('../controllers/tradesmanApprovalController');
 
-// list pending
+// list pending (GET /admin/tradesmen/pending)
 router.get('/tradesmen/pending', verifyAdminToken, tradesmanApprovalController.getPending);
 
-// approve
+// approve (POST /admin/tradesmen/:userId/approve)
 router.post('/tradesmen/:userId/approve', verifyAdminToken, tradesmanApprovalController.approve);
 
-// reject
+// reject (POST /admin/tradesmen/:userId/reject)
 router.post('/tradesmen/:userId/reject', verifyAdminToken, tradesmanApprovalController.reject);
 
-// optional: fetch single
+// fetch single (GET /admin/tradesmen/:userId)
 router.get('/tradesmen/:userId', verifyAdminToken, tradesmanApprovalController.getOne);
 
 module.exports = router;

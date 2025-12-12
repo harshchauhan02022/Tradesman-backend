@@ -15,10 +15,45 @@ const sendResponse = (res, statusCode, success, message, data = null, error = nu
 
 const signToken = (user) => {
   return jwt.sign(
-    { id: user.id, email: user.email, role: user.role },   // 👈 role bhi bhej diya
+    { id: user.id, email: user.email, role: user.role },
     process.env.JWT_SECRET,
     { expiresIn: '7d' }
   );
+};
+
+/**
+ * Helper to parse pagination query params
+ */
+const parsePagination = (req) => {
+  let page = parseInt(req.query.page, 10) || 1;
+  let limit = parseInt(req.query.limit, 10) || 10;
+  const maxLimit = 100;
+
+  if (page < 1) page = 1;
+  if (limit < 1) limit = 10;
+  if (limit > maxLimit) limit = maxLimit;
+
+  const offset = (page - 1) * limit;
+  return { page, limit, offset };
+};
+
+/**
+ * Helper to shape paginated response
+ */
+const paginatedResponse = (res, message, result, page, limit) => {
+  const total = result.count ?? (Array.isArray(result) ? result.length : 0);
+  const rows = result.rows ?? result;
+  const totalPages = limit ? Math.ceil(total / limit) : 1;
+
+  return sendResponse(res, 200, true, message, {
+    meta: {
+      total,
+      page,
+      perPage: limit,
+      totalPages,
+    },
+    data: rows,
+  });
 };
 
 exports.register = async (req, res) => {
@@ -43,10 +78,6 @@ exports.register = async (req, res) => {
     const profileImageFile = req.files?.profileImage?.[0] || null;
     const licenseDocFile   = req.files?.licenseDocument?.[0] || null;
     const portfolioFiles   = req.files?.portfolioPhotos || [];
-
-    // console.log for debug (chaho to rakh sakte ho)
-    // console.log('BODY ===>', req.body);
-    // console.log('FILES ===>', req.files);
 
     // 1) Email already exist?
     const isExist = await User.findOne({ where: { email } });
@@ -156,16 +187,133 @@ exports.login = async (req, res) => {
 
   } catch (error) {
     console.error("Login Error:", error);
-    return res.status(500).json({ success: false, message: 'Server error' });
+    return sendResponse(res, 500, false, "Server error");
   }
 };
 
+/**
+ * GET /api/users
+ * Supports pagination and optional search & role filter:
+ * ?page=1&limit=10&search=deepak&role=tradesman
+ */
 exports.getAllUsers = async (req, res) => {
   try {
-    const users = await User.findAll();
-    return sendResponse(res, 200, true, "Users fetched", users);
+    const { page, limit, offset } = parsePagination(req);
+    const { search, role } = req.query;
+
+    const where = {};
+    if (role) where.role = role;
+
+    if (search) {
+      where[Op.or] = [
+        { name: { [Op.iLike]: `%${search}%` } }, // For Postgres; with other DBs use Op.substring or adjust as needed
+        { email: { [Op.iLike]: `%${search}%` } },
+        { mobile: { [Op.iLike]: `%${search}%` } },
+      ];
+    }
+
+    // use findAndCountAll for pagination metadata
+    const result = await User.findAndCountAll({
+      where,
+      include: [{ model: TradesmanDetails, as: "TradesmanDetail" }],
+      limit,
+      offset,
+      order: [['createdAt', 'DESC']],
+    });
+
+    return paginatedResponse(res, "Users fetched", result, page, limit);
   } catch (error) {
     console.error("Fetch Users Error:", error);
+    return sendResponse(res, 500, false, "Server error");
+  }
+};
+
+/**
+ * GET /api/users/tradesmen
+ * Public: lists tradesmen with their TradesmanDetails
+ * Supports pagination: ?page=1&limit=10
+ * Optional filter: tradeType (e.g. ?tradeType=plumber)
+ */
+exports.getAllTradesmen = async (req, res) => {
+  try {
+    const { page, limit, offset } = parsePagination(req);
+    const { tradeType, search } = req.query;
+
+    const whereUser = { role: "tradesman" };
+
+    // If search on user fields
+    if (search) {
+      whereUser[Op.or] = [
+        { name: { [Op.iLike]: `%${search}%` } },
+        { email: { [Op.iLike]: `%${search}%` } },
+        { mobile: { [Op.iLike]: `%${search}%` } },
+      ];
+    }
+
+    // Filter on TradesmanDetails (tradeType)
+    const tradesmanWhere = {};
+    if (tradeType) tradesmanWhere.tradeType = tradeType;
+
+    const result = await User.findAndCountAll({
+      where: whereUser,
+      include: [
+        {
+          model: TradesmanDetails,
+          as: "TradesmanDetail",
+          where: Object.keys(tradesmanWhere).length ? tradesmanWhere : undefined,
+          required: false,
+        },
+      ],
+      limit,
+      offset,
+      order: [['createdAt', 'DESC']],
+    });
+
+    if (!result || result.count === 0) {
+      return sendResponse(res, 404, false, "No tradesmen found");
+    }
+
+    return paginatedResponse(res, "Tradesmen fetched", result, page, limit);
+  } catch (error) {
+    console.error("Fetch Tradesmen Error:", error);
+    return sendResponse(res, 500, false, "Server error");
+  }
+};
+
+/**
+ * GET /api/users/clients
+ * Public: lists clients (role = client)
+ * Supports pagination ?page & ?limit
+ */
+exports.getAllClients = async (req, res) => {
+  try {
+    const { page, limit, offset } = parsePagination(req);
+    const { search } = req.query;
+
+    const where = { role: "client" };
+
+    if (search) {
+      where[Op.or] = [
+        { name: { [Op.iLike]: `%${search}%` } },
+        { email: { [Op.iLike]: `%${search}%` } },
+        { mobile: { [Op.iLike]: `%${search}%` } },
+      ];
+    }
+
+    const result = await User.findAndCountAll({
+      where,
+      limit,
+      offset,
+      order: [['createdAt', 'DESC']],
+    });
+
+    if (!result || result.count === 0) {
+      return sendResponse(res, 404, false, "No clients found");
+    }
+
+    return paginatedResponse(res, "Clients fetched", result, page, limit);
+  } catch (error) {
+    console.error("Fetch Clients Error:", error);
     return sendResponse(res, 500, false, "Server error");
   }
 };
@@ -258,44 +406,6 @@ exports.deleteUser = async (req, res) => {
   }
 };
 
-exports.getAllTradesmen = async (req, res) => {
-  try {
-    const tradesmen = await User.findAll({
-      where: { role: "tradesman" },
-      include: [
-        {
-          model: TradesmanDetails,
-          as: "TradesmanDetail",   // 👈 IMPORTANT
-        },
-      ],
-    });
-
-    if (!tradesmen || tradesmen.length === 0) {
-      return sendResponse(res, 404, false, "No tradesmen found");
-    }
-
-    return sendResponse(res, 200, true, "Tradesmen fetched", tradesmen);
-  } catch (error) {
-    console.error("Fetch Tradesmen Error:", error);
-    return sendResponse(res, 500, false, "Server error");
-  }
-};
-
-exports.getAllClients = async (req, res) => {
-  try {
-    const clients = await User.findAll({ where: { role: "client" } });
-
-    if (clients.length === 0)
-      return sendResponse(res, 404, false, "No clients found");
-
-    return sendResponse(res, 200, true, "Clients fetched", clients);
-
-  } catch (error) {
-    console.error("Fetch Clients Error:", error);
-    return sendResponse(res, 500, false, "Server error");
-  }
-};
-
 exports.forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
@@ -382,7 +492,7 @@ exports.changePassword = async (req, res) => {
   }
 };
 
-// 👇 isko file ke beech me kahin add kar do
+// 👇 getMeProfile
 exports.getMeProfile = async (req, res) => {
   try {
     const userId = req.user?.id;

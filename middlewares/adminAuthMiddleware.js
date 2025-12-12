@@ -1,29 +1,31 @@
+// middlewares/adminAuthMiddleware.js
 const jwt = require('jsonwebtoken');
 const Admin = require('../models/adminModel');
 require('dotenv').config();
 
 exports.verifyAdminToken = async (req, res, next) => {
   try {
-    const header = req.headers.authorization || '';
-    const token = header.startsWith('Bearer ') ? header.split(' ')[1] : null;
-    if (!token) return res.status(401).json({ success:false, message: 'No token provided' });
+    const auth = req.headers.authorization;
+    if (!auth) return res.status(401).json({ success: false, message: 'No token provided' });
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    if (!decoded || !decoded.id) return res.status(401).json({ success:false, message: 'Invalid token' });
+    const parts = auth.split(' ');
+    if (parts.length !== 2 || parts[0] !== 'Bearer') return res.status(401).json({ success: false, message: 'Invalid token format' });
 
-    // optional: ensure token has role admin
-    if (decoded.role && decoded.role !== 'admin') {
-      return res.status(403).json({ success:false, message: 'Admin role required' });
+    const token = parts[1];
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (e) {
+      return res.status(401).json({ success: false, message: e.message || 'Invalid token' });
     }
 
-    // Make sure admin still exists (optional but recommended)
     const admin = await Admin.findByPk(decoded.id);
-    if (!admin) return res.status(401).json({ success:false, message: 'Unauthorized' });
+    if (!admin) return res.status(401).json({ success: false, message: 'Admin not found' });
 
-    req.admin = admin;
+    req.user = { id: admin.id, role: admin.role, name: admin.name, email: admin.email };
     next();
   } catch (err) {
     console.error('verifyAdminToken error:', err);
-    return res.status(401).json({ success:false, message: 'Unauthorized' });
+    return res.status(500).json({ success: false, message: 'Server error' });
   }
 };

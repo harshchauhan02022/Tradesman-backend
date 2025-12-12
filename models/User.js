@@ -4,29 +4,29 @@ const sequelize = require("../config/db");
 const User = sequelize.define(
   "User",
   {
-    id: { 
-      type: DataTypes.INTEGER, 
-      primaryKey: true,   
-      autoIncrement: true 
+    id: {
+      type: DataTypes.INTEGER,
+      primaryKey: true,
+      autoIncrement: true
     },
 
-    name: { 
-      type: DataTypes.STRING, 
-      allowNull: false 
+    name: {
+      type: DataTypes.STRING,
+      allowNull: false
     },
 
-    email: { 
-      type: DataTypes.STRING, 
+    email: {
+      type: DataTypes.STRING,
       allowNull: false,
       // unique: true
     },
 
-    mobile: { 
-      type: DataTypes.STRING 
+    mobile: {
+      type: DataTypes.STRING
     },
 
-    password: { 
-      type: DataTypes.STRING 
+    password: {
+      type: DataTypes.STRING
     },
 
     role: {
@@ -34,17 +34,17 @@ const User = sequelize.define(
       defaultValue: "client",
     },
 
-    provider: { 
-      type: DataTypes.STRING, 
-      defaultValue: "manual" 
+    provider: {
+      type: DataTypes.STRING,
+      defaultValue: "manual"
     },
 
-    googleId: { 
-      type: DataTypes.STRING 
+    googleId: {
+      type: DataTypes.STRING
     },
 
-    profileImage: { 
-      type: DataTypes.STRING 
+    profileImage: {
+      type: DataTypes.STRING
     },
 
     resetPasswordToken: {
@@ -55,7 +55,12 @@ const User = sequelize.define(
     resetPasswordExpires: {
       type: DataTypes.DATE,
       allowNull: true
+    },
+    isVerified: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false
     }
+
   },
   {
     timestamps: true,

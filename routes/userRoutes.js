@@ -6,29 +6,29 @@ const upload = require('../middlewares/uploadMiddleware');
 
 // Public Routes
 router.post(
-    '/register',
-    upload.fields([
-        { name: 'profileImage', maxCount: 1 },
-        { name: 'licenseDocument', maxCount: 1 },
-        { name: 'portfolioPhotos', maxCount: 10 },
-    ]),
-    userController.register
+  '/register',
+  upload.fields([
+    { name: 'profileImage', maxCount: 1 },
+    { name: 'licenseDocument', maxCount: 1 },
+    { name: 'portfolioPhotos', maxCount: 10 },
+  ]),
+  userController.register
 );
 
 router.post('/login', userController.login);
 
 // 🔹 Custom Get Routes (must be above /:id)
+// These endpoints support pagination via query params: ?page=1&limit=10
 router.get('/tradesmen', userController.getAllTradesmen);
 router.get('/clients', userController.getAllClients);
 
 // 🔹 Token based current user profile
 router.get('/me', verifyToken, userController.getMeProfile);
 
-
 // 🔹 Protected Route for Change Password
 router.put('/change-password', verifyToken, userController.changePassword); 
 
-// 🔹 Other CRUD routes
+// 🔹 Other CRUD routes (getAllUsers supports pagination & search)
 router.get('/', userController.getAllUsers);
 router.get('/:id', userController.getUserById);
 router.put('/:id', verifyToken, userController.updateUser);
