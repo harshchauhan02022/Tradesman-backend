@@ -1,132 +1,127 @@
-// controllers/hireController.js
 const Hire = require('../models/hireModel');
 const Review = require('../models/reviewModel');
 const User = require('../models/User');
-const { Op, fn, col } = require('sequelize');
+const { Op } = require('sequelize');
+const { io, onlineUsers } = require('../server');
 
+// Helper
 const sendResponse = (res, status, success, message, data = null) =>
   res.status(status).json({ success, message, data });
 
-/**
- * POST /api/hire/request
- * body: { tradesmanId, jobDescription? }
- * Client -> send hire request
- */
+/* ================================================
+   1️⃣ Client → Send Hire Request
+================================================ */
 exports.requestHire = async (req, res) => {
   try {
-    const clientId = req.user?.id;
-    const role = req.user?.role;
+    const clientId = req.user.id;
     const { tradesmanId, jobDescription } = req.body;
 
-    if (!clientId) return sendResponse(res, 401, false, 'Unauthorized');
-    if (role !== 'client')
-      return sendResponse(res, 403, false, 'Only clients can send hire request');
-    if (!tradesmanId)
-      return sendResponse(res, 400, false, 'tradesmanId is required');
-
-    const existingPending = await Hire.findOne({
-      where: { clientId, tradesmanId, status: 'pending' }
+    // Check for existing pending hire
+    const existing = await Hire.findOne({
+      where: { clientId, tradesmanId, status: "pending" }
     });
 
-    if (existingPending) {
-      return sendResponse(
-        res,
-        400,
-        false,
-        'You already have a pending hire request with this tradesman'
-      );
-    }
+    if (existing)
+      return sendResponse(res, 400, false, "Pending request already exists");
 
+    // Create new hire
     const hire = await Hire.create({
       clientId,
       tradesmanId,
-      jobDescription: jobDescription || null,
-      status: 'pending'
+      jobDescription,
+      status: "pending"
     });
 
-    return sendResponse(res, 201, true, 'Hire request sent', hire);
+    // 🔥 Send real-time event to Tradesman
+    const traderSocket = onlineUsers[tradesmanId];
+    if (traderSocket) {
+      io.to(traderSocket).emit("hire_request", {
+        hireId: hire.id,
+        clientId,
+        jobDescription,
+        status: "pending"
+      });
+    }
+
+    return sendResponse(res, 201, true, "Hire request sent", hire);
+
   } catch (err) {
-    console.error('requestHire error:', err);
-    return sendResponse(res, 500, false, 'Server error');
+    console.error(err);
+    return sendResponse(res, 500, false, "Server error");
   }
 };
 
-/**
- * POST /api/hire/respond
- * body: { hireId, action: "accept" | "reject" }
- * Tradesman -> accept / reject
- */
+/* ================================================
+   2️⃣ Tradesman → Accept / Reject Hire
+================================================ */
 exports.respondHire = async (req, res) => {
   try {
-    const tradesmanId = req.user?.id;
-    const role = req.user?.role;
+    const tradesmanId = req.user.id;
     const { hireId, action } = req.body;
 
-    if (!tradesmanId) return sendResponse(res, 401, false, 'Unauthorized');
-    if (role !== 'tradesman')
-      return sendResponse(res, 403, false, 'Only tradesman can respond to hire');
-    if (!hireId || !['accept', 'reject'].includes(action))
-      return sendResponse(res, 400, false, 'hireId and valid action required');
-
     const hire = await Hire.findOne({ where: { id: hireId, tradesmanId } });
-    if (!hire) return sendResponse(res, 404, false, 'Hire not found');
-    if (hire.status !== 'pending')
-      return sendResponse(res, 400, false, 'Hire is not pending');
 
-    hire.status = action === 'accept' ? 'accepted' : 'rejected';
+    if (!hire) return sendResponse(res, 404, false, "Hire not found");
+
+    hire.status = action === "accept" ? "accepted" : "rejected";
     await hire.save();
+
+    // 🔥 Send realtime update to Client
+    const clientSocket = onlineUsers[hire.clientId];
+    if (clientSocket) {
+      io.to(clientSocket).emit("hire_response", {
+        hireId,
+        status: hire.status
+      });
+    }
 
     return sendResponse(res, 200, true, `Hire ${hire.status}`, hire);
+
   } catch (err) {
-    console.error('respondHire error:', err);
-    return sendResponse(res, 500, false, 'Server error');
+    console.error(err);
+    return sendResponse(res, 500, false, "Server error");
   }
 };
 
-/**
- * POST /api/hire/complete
- * body: { hireId }
- * Client -> mark job completed
- */
+/* ================================================
+   3️⃣ Client → Complete Job
+================================================ */
 exports.completeHire = async (req, res) => {
   try {
-    const clientId = req.user?.id;
-    const role = req.user?.role;
+    const clientId = req.user.id;
     const { hireId } = req.body;
 
-    if (!clientId) return sendResponse(res, 401, false, 'Unauthorized');
-    if (role !== 'client')
-      return sendResponse(res, 403, false, 'Only client can complete hire');
-    if (!hireId)
-      return sendResponse(res, 400, false, 'hireId required');
-
     const hire = await Hire.findOne({ where: { id: hireId, clientId } });
-    if (!hire) return sendResponse(res, 404, false, 'Hire not found');
-    if (hire.status !== 'accepted')
-      return sendResponse(res, 400, false, 'Only accepted hire can be completed');
 
-    hire.status = 'completed';
+    if (!hire) return sendResponse(res, 404, false, "Hire not found");
+
+    hire.status = "completed";
     await hire.save();
 
-    return sendResponse(res, 200, true, 'Hire marked as completed', hire);
+    // 🔥 Notify tradesman
+    const traderSocket = onlineUsers[hire.tradesmanId];
+    if (traderSocket) {
+      io.to(traderSocket).emit("hire_completed", {
+        hireId,
+        status: "completed"
+      });
+    }
+
+    return sendResponse(res, 200, true, "Hire completed", hire);
+
   } catch (err) {
-    console.error('completeHire error:', err);
-    return sendResponse(res, 500, false, 'Server error');
+    console.error(err);
+    return sendResponse(res, 500, false, "Server error");
   }
 };
 
-/**
- * GET /api/hire/status/:userId
- * For chat screen -> latest hire between me & other user
- */
+/* ================================================
+   4️⃣ CHAT SCREEN → Get Latest Hire Status
+================================================ */
 exports.getHireStatusForConversation = async (req, res) => {
   try {
-    const me = req.user?.id;
-    const otherId = parseInt(req.params.userId, 10);
-
-    if (!me) return sendResponse(res, 401, false, 'Unauthorized');
-    if (!otherId || Number.isNaN(otherId))
-      return sendResponse(res, 400, false, 'userId required');
+    const me = req.user.id;
+    const otherId = parseInt(req.params.userId);
 
     const hire = await Hire.findOne({
       where: {
@@ -135,20 +130,21 @@ exports.getHireStatusForConversation = async (req, res) => {
           { clientId: otherId, tradesmanId: me }
         ]
       },
-      order: [['createdAt', 'DESC']]
+      order: [["createdAt", "DESC"]],
+      include: [
+        { model: User, as: "client", attributes: ["id", "name"] },
+        { model: User, as: "tradesman", attributes: ["id", "name"] }
+      ]
     });
 
-    return sendResponse(res, 200, true, 'Hire status fetched', hire);
+    return sendResponse(res, 200, true, "Hire status fetched", hire);
+
   } catch (err) {
-    console.error('getHireStatusForConversation error:', err);
-    return sendResponse(res, 500, false, 'Server error');
+    console.error(err);
+    return sendResponse(res, 500, false, "Server error");
   }
 };
 
-/* ============================================================
-   NEW: JOB LIST (Booking tab)
-   GET /api/hire/my?filter=all|active|completed
-============================================================ */
 exports.getMyJobs = async (req, res) => {
   try {
     const userId = req.user?.id;

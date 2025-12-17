@@ -22,6 +22,8 @@ router.post('/login', userController.login);
 router.get('/tradesmen', userController.getAllTradesmen);
 router.get('/clients', userController.getAllClients);
 
+router.get('/profile/:id', userController.getFullUserProfile);
+
 // 🔹 Token based current user profile
 router.get('/me', verifyToken, userController.getMeProfile);
 

@@ -1,7 +1,10 @@
 const User = require('../models/User');
 const TradesmanDetails = require("../models/TradesmanDetails");
 const SubscriptionPlan = require("../models/SubscriptionPlan");
-const UserSubscription = require("../models/UserSubscription");
+const UserSubscription = require("../models/UserSubscription"); 
+const Hire = require("../models/hireModel");
+const Review = require("../models/reviewModel");
+
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { Op } = require('sequelize');
@@ -76,8 +79,8 @@ exports.register = async (req, res) => {
 
     // 👇 Files from multer
     const profileImageFile = req.files?.profileImage?.[0] || null;
-    const licenseDocFile   = req.files?.licenseDocument?.[0] || null;
-    const portfolioFiles   = req.files?.portfolioPhotos || [];
+    const licenseDocFile = req.files?.licenseDocument?.[0] || null;
+    const portfolioFiles = req.files?.portfolioPhotos || [];
 
     // 1) Email already exist?
     const isExist = await User.findOne({ where: { email } });
@@ -516,3 +519,134 @@ exports.getMeProfile = async (req, res) => {
     return sendResponse(res, 500, false, "Server error");
   }
 };
+
+exports.getFullUserProfile = async (req, res) => {
+  try {
+    const userId = req.params.id;
+
+    // 1️⃣ Fetch user & tradesman details if exist
+    const user = await User.findOne({
+      where: { id: userId },
+      include: [
+        { model: TradesmanDetails, as: "TradesmanDetail" }
+      ]
+    });
+
+    if (!user) return sendResponse(res, 404, false, "User not found");
+
+    // ─────────────────────────────────────────────
+    // 2️⃣ FETCH JOB HISTORY
+    // ─────────────────────────────────────────────
+
+    let jobHistory = [];
+
+    if (user.role === "tradesman") {
+      // Tradesman → jobs he worked on
+      const jobs = await Hire.findAll({
+        where: { tradesmanId: userId, status: "completed" },
+        include: [{ model: User, as: "client", attributes: ["name"] }],
+        order: [["updatedAt", "DESC"]]
+      });
+
+      jobHistory = jobs.map(j => ({
+        jobId: j.id,
+        clientName: j.client?.name,
+        jobDescription: j.jobDescription,
+        date: j.updatedAt,
+        status: j.status
+      }));
+    }
+
+    if (user.role === "client") {
+      // Client → jobs he requested
+      const jobs = await Hire.findAll({
+        where: { clientId: userId },
+        include: [
+          { model: User, as: "tradesman", attributes: ["name"] }
+        ],
+        order: [["createdAt", "DESC"]]
+      });
+
+      jobHistory = jobs.map(j => ({
+        jobId: j.id,
+        tradesmanName: j.tradesman?.name,
+        jobDescription: j.jobDescription,
+        status: j.status,
+        date: j.updatedAt
+      }));
+    }
+
+    // ─────────────────────────────────────────────
+    // 3️⃣ REVIEWS
+    // ─────────────────────────────────────────────
+
+    const reviews = await Review.findAll({
+      where: { toUserId: userId },
+      include: [{ model: User, as: "fromUser", attributes: ["name"] }],
+      order: [["createdAt", "DESC"]]
+    });
+
+    const formattedReviews = reviews.map(r => ({
+      rating: r.rating,
+      comment: r.comment,
+      fromUser: r.fromUser?.name,
+      jobDate: r.jobDate
+    }));
+
+    const avgRating = reviews.length
+      ? (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1)
+      : null;
+
+    // ─────────────────────────────────────────────
+    // 4️⃣ SUBSCRIPTION (Tradesman only)
+    // ─────────────────────────────────────────────
+    let subscription = null;
+
+    if (user.role === "tradesman") {
+      const sub = await UserSubscription.findOne({
+        where: { userId, status: "active" },
+        include: [{ model: SubscriptionPlan, as: "plan" }]
+      });
+
+      if (sub) {
+        subscription = {
+          planName: sub.plan?.name,
+          status: sub.status,
+          expiresOn: sub.endDate
+        };
+      }
+    }
+
+    // ─────────────────────────────────────────────
+    // 5️⃣ FINAL RESPONSE
+    // ─────────────────────────────────────────────
+
+    const response = {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      mobile: user.mobile,
+      profileImage: user.profileImage,
+      role: user.role,
+
+      // Tradesman-only fields
+      tradeType: user.TradesmanDetail?.tradeType || null,
+      businessName: user.TradesmanDetail?.businessName || null,
+      shortBio: user.TradesmanDetail?.shortBio || null,
+      portfolioPhotos: user.TradesmanDetail?.portfolioPhotos || [],
+
+      // Common
+      jobHistory,
+      reviews: formattedReviews,
+      averageRating: avgRating,
+      subscription
+    };
+
+    return sendResponse(res, 200, true, "Profile fetched", response);
+
+  } catch (error) {
+    console.error("Profile Error:", error);
+    return sendResponse(res, 500, false, "Server error", null, error);
+  }
+};
+
