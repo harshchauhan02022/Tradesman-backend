@@ -1,20 +1,21 @@
-// routes/locationRoutes.js
-
 const express = require("express");
 const router = express.Router();
-const travelPlanController = require("../controllers/locationController");
+const locationController = require("../controllers/locationController");
 const { verifyToken } = require("../middlewares/authMiddleware");
 
-// Create
-router.post("/", verifyToken, travelPlanController.createTravelPlan);
+// Create travel plan
+router.post("/", verifyToken, locationController.createTravelPlan);
 
 // My travel plans
-router.get("/my", verifyToken, travelPlanController.getMyTravelPlans);
+router.get("/my", verifyToken, locationController.getMyTravelPlans);
 
-// Update
-router.put("/:id", verifyToken, travelPlanController.updateTravelPlan);
+// Update travel plan
+router.put("/:id", verifyToken, locationController.updateTravelPlan);
 
-// Delete
-router.delete("/:id", verifyToken, travelPlanController.deleteTravelPlan);
+// Delete travel plan
+router.delete("/:id", verifyToken, locationController.deleteTravelPlan);
+
+// Tradesman public profile
+router.get("/tradesman/:tradesmanId", locationController.getTradesmanProfile);
 
 module.exports = router;

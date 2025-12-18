@@ -650,3 +650,109 @@ exports.getFullUserProfile = async (req, res) => {
   }
 };
 
+exports.filterTradesmen = async (req, res) => {
+  try {
+    const {
+      tradeType,
+      lat,
+      lng,
+      radius = 40,
+      rating,
+      verified,
+      availability
+    } = req.query;
+
+    let whereUser = { role: "tradesman" };
+    let whereTrade = {};
+
+    // 1️⃣ Trade Type Filter
+    if (tradeType) {
+      const trades = tradeType.split(",").map(t => t.trim());
+      whereTrade.tradeType = { [Op.or]: trades };
+    }
+
+    // 2️⃣ Verified Tradesman
+    if (verified === "true") {
+      whereTrade.isApproved = true;
+    }
+
+    // 3️⃣ Availability filter
+    if (availability === "today") {
+      whereTrade.startDate = {
+        [Op.lte]: new Date(),
+      };
+      whereTrade.endDate = {
+        [Op.gte]: new Date(),
+      };
+    }
+
+    // 4️⃣ Fetch all tradesmen with details
+    let tradesmen = await User.findAll({
+      where: whereUser,
+      include: [
+        {
+          model: TradesmanDetails,
+          as: "TradesmanDetail",
+          where: whereTrade
+        }
+      ]
+    });
+
+    // 5️⃣ Rating Filter
+    if (rating) {
+      for (let t of tradesmen) {
+        const agg = await Review.findOne({
+          where: { toUserId: t.id },
+          attributes: [
+            [fn("AVG", col("rating")), "avgRating"]
+          ]
+        });
+
+        t.dataValues.avgRating = agg?.dataValues?.avgRating || 0;
+      }
+
+      tradesmen = tradesmen.filter(t => t.dataValues.avgRating >= rating);
+    }
+
+    // 6️⃣ GPS Distance Filter (40 km radius)
+    if (lat && lng) {
+      const R = 6371; // Earth radius
+
+      tradesmen = tradesmen.filter(t => {
+        const location = t.TradesmanDetail.currentLocation;
+        if (!location) return false;
+
+        const [tLat, tLng] = location.split(",").map(Number);
+
+        const dLat = (tLat - lat) * Math.PI / 180;
+        const dLng = (tLng - lng) * Math.PI / 180;
+
+        const a =
+          Math.sin(dLat / 2) ** 2 +
+          Math.cos(lat * Math.PI / 180) *
+            Math.cos(tLat * Math.PI / 180) *
+            Math.sin(dLng / 2) ** 2;
+
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        const distance = R * c;
+
+        return distance <= radius;
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: "Filtered tradesmen",
+      data: tradesmen
+    });
+
+  } catch (err) {
+    console.error("Filter Error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Server error"
+    });
+  }
+};
+
+

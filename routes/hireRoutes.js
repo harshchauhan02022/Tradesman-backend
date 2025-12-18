@@ -1,28 +1,27 @@
-// routes/hireRoutes.js
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const hireController = require('../controllers/hireController');
-const { verifyToken } = require('../middlewares/authMiddleware');
+const hireController = require("../controllers/hireController");
+const { verifyToken } = require("../middlewares/authMiddleware");
 
-// Client → create hire request
-router.post('/request', verifyToken, hireController.requestHire);
+// 1. Client → send hire request
+router.post("/request", verifyToken, hireController.requestHire);
 
-// Tradesman → accept / reject
-router.post('/respond', verifyToken, hireController.respondHire);
+// 2. Tradesman → accept / reject
+router.post("/respond", verifyToken, hireController.respondHire);
 
-// Client → mark job as completed
-router.post('/complete', verifyToken, hireController.completeHire);
+// 3. Tradesman → request job completion
+router.post("/request-complete", verifyToken, hireController.requestJobCompletion);
 
-// Chat screen → latest hire status between me & other user
-router.get('/status/:userId', verifyToken, hireController.getHireStatusForConversation);
+// 4. Client → YES / NO completion
+router.post("/confirm-complete", verifyToken, hireController.confirmJobCompletion);
 
-// Booking tab → my jobs list (client or tradesman)
-router.get('/my', verifyToken, hireController.getMyJobs);
+// 5. Chat → latest hire status
+router.get("/status/:userId", verifyToken, hireController.getHireStatusForConversation);
 
-// Rate Your Experience → create review
-router.post('/review', verifyToken, hireController.createReviewForJob);
+// 6. Client → pending completion check
+router.get("/pending-complete/:hireId", verifyToken, hireController.getPendingCompletionStatus);
 
-// Tradesman profile → reviews + avg rating
-router.get('/reviews/:tradesmanId', hireController.getReviewsForTradesman);
+// 7. My jobs
+router.get("/my", verifyToken, hireController.getMyJobs);
 
 module.exports = router;

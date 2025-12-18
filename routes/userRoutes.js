@@ -21,6 +21,8 @@ router.post('/login', userController.login);
 // These endpoints support pagination via query params: ?page=1&limit=10
 router.get('/tradesmen', userController.getAllTradesmen);
 router.get('/clients', userController.getAllClients);
+router.get('/tradesmen/filter', userController.filterTradesmen);
+
 
 router.get('/profile/:id', userController.getFullUserProfile);
 

@@ -30,6 +30,10 @@ const Hire = sequelize.define('Hire', {
   jobDescription: {
     type: DataTypes.TEXT,
     allowNull: true
+  },
+  requestCompletion: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
   }
 }, {
   tableName: 'hires',

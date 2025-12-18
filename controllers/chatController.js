@@ -34,9 +34,6 @@ const paginatedResponse = (res, message, items, total, page, limit) => {
   });
 };
 
-// ============================================
-// POST /api/chat/send
-// ============================================
 exports.sendMessage = async (req, res) => {
   try {
     const senderId = req.user?.id;
@@ -62,10 +59,6 @@ exports.sendMessage = async (req, res) => {
   }
 };
 
-// ============================================
-// GET /api/chat/conversation/:userId
-// Supports pagination: ?page=1&limit=20
-// ============================================
 exports.getConversation = async (req, res) => {
   try {
     const loggedUser = parseInt(req.user.id, 10);

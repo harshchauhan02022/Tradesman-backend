@@ -1,15 +1,14 @@
-// controllers/locationController.js
-
 const TravelPlan = require("../models/locationModel");
 const User = require("../models/User");
 const SubscriptionPlan = require("../models/SubscriptionPlan");
 const UserSubscription = require("../models/UserSubscription");
-const { Op } = require("sequelize");
+const Review = require("../models/reviewModel");
+const { Op, fn, col } = require("sequelize"); // ✅ FIXED
 
 const sendResponse = (res, statusCode, success, message, data = null) =>
   res.status(statusCode).json({ success, message, data });
 
-// Helper: get active subscription
+// ================= Helper =================
 async function getActivePlanForUser(userId) {
   return await UserSubscription.findOne({
     where: { userId, status: "active" },
@@ -17,35 +16,23 @@ async function getActivePlanForUser(userId) {
   });
 }
 
-// Helper: stops parser
 function parseStops(stops) {
   if (!stops) return null;
 
-  let stopsArray = null;
+  let arr = Array.isArray(stops)
+    ? stops
+    : typeof stops === "string"
+    ? stops.split(",").map(s => s.trim())
+    : null;
 
-  if (Array.isArray(stops)) {
-    stopsArray = stops;
-  } else if (typeof stops === "string") {
-    stopsArray = stops
-      .split(",")
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
-  }
-
-  if (!stopsArray || !stopsArray.length) return null;
-  if (stopsArray.length > 4) stopsArray = stopsArray.slice(0, 4);
-
-  return stopsArray;
+  if (!arr || !arr.length) return null;
+  return arr.slice(0, 4);
 }
 
-/* ============================================================
-   CREATE NEW TRAVEL PLAN
-   POST /api/locations
-============================================================ */
+// ================= CREATE =================
 exports.createTravelPlan = async (req, res) => {
   try {
-    const userId = req.user?.id;
-    const role = req.user?.role;
+    const { id: userId, role } = req.user;
 
     if (role !== "tradesman")
       return sendResponse(res, 403, false, "Only tradesmen can create plans");
@@ -62,24 +49,17 @@ exports.createTravelPlan = async (req, res) => {
     } = req.body;
 
     if (!startLocation || !destination)
-      return sendResponse(res, 400, false, "startLocation & destination are required");
+      return sendResponse(res, 400, false, "startLocation & destination required");
 
     const activeSub = await getActivePlanForUser(userId);
     if (!activeSub)
-      return sendResponse(res, 403, false, "Please purchase a subscription");
+      return sendResponse(res, 403, false, "Subscription required");
 
     const maxShared = activeSub.plan.maxSharedLocations;
-
-    if (maxShared !== null && maxShared !== undefined) {
+    if (maxShared !== null) {
       const count = await TravelPlan.count({ where: { tradesmanId: userId } });
-      if (count >= maxShared) {
-        return sendResponse(
-          res,
-          403,
-          false,
-          `Limit reached (${maxShared}). Upgrade your plan`
-        );
-      }
+      if (count >= maxShared)
+        return sendResponse(res, 403, false, "Plan limit reached");
     }
 
     const plan = await TravelPlan.create({
@@ -101,103 +81,107 @@ exports.createTravelPlan = async (req, res) => {
   }
 };
 
-/* ============================================================
-   MY TRAVEL PLANS
-   GET /api/locations/my
-============================================================ */
+// ================= MY PLANS =================
 exports.getMyTravelPlans = async (req, res) => {
   try {
-    const userId = req.user?.id;
-
     const plans = await TravelPlan.findAll({
-      where: { tradesmanId: userId },
+      where: { tradesmanId: req.user.id },
       order: [["createdAt", "DESC"]],
     });
-
-    return sendResponse(res, 200, true, "My travel plans fetched", plans);
+    return sendResponse(res, 200, true, "My plans", plans);
   } catch (err) {
-    console.error(err);
     return sendResponse(res, 500, false, "Server error");
   }
 };
 
-/* ============================================================
-   UPDATE TRAVEL PLAN
-   PUT /api/locations/:id
-============================================================ */
+// ================= UPDATE =================
 exports.updateTravelPlan = async (req, res) => {
   try {
-    const userId = req.user?.id;
-    const role = req.user?.role;
-    const id = req.params.id;
-
-    if (role !== "tradesman")
-      return sendResponse(res, 403, false, "Only tradesmen can update");
-
-    const plan = await TravelPlan.findByPk(id);
-    if (!plan) return sendResponse(res, 404, false, "Travel plan not found");
-
-    if (plan.tradesmanId !== userId)
+    const plan = await TravelPlan.findByPk(req.params.id);
+    if (!plan) return sendResponse(res, 404, false, "Plan not found");
+    if (plan.tradesmanId !== req.user.id)
       return sendResponse(res, 403, false, "Not allowed");
 
-    const {
-      currentLocation,
-      startLocation,
-      destination,
-      priceRange,
-      allowStops,
-      stops,
-      startDate,
-      endDate,
-      status,
-    } = req.body;
-
-    if (currentLocation !== undefined) plan.currentLocation = currentLocation;
-    if (startLocation !== undefined) plan.startLocation = startLocation;
-    if (destination !== undefined) plan.destination = destination;
-    if (priceRange !== undefined) plan.priceRange = priceRange;
-    if (allowStops !== undefined) plan.allowStops = allowStops;
-    if (stops !== undefined) plan.stops = parseStops(stops);
-    if (startDate !== undefined) plan.startDate = startDate;
-    if (endDate !== undefined) plan.endDate = endDate;
-
-    if (status && ["open", "closed", "cancelled"].includes(status)) {
-      plan.status = status;
-    }
+    Object.assign(plan, req.body);
+    if (req.body.stops) plan.stops = parseStops(req.body.stops);
 
     await plan.save();
-
-    return sendResponse(res, 200, true, "Travel plan updated", plan);
+    return sendResponse(res, 200, true, "Updated", plan);
   } catch (err) {
-    console.error(err);
     return sendResponse(res, 500, false, "Server error");
   }
 };
 
-/* ============================================================
-   DELETE TRAVEL PLAN
-   DELETE /api/locations/:id
-============================================================ */
+// ================= DELETE =================
 exports.deleteTravelPlan = async (req, res) => {
   try {
-    const userId = req.user?.id;
-    const role = req.user?.role;
-    const id = req.params.id;
-
-    if (role !== "tradesman")
-      return sendResponse(res, 403, false, "Only tradesmen can delete");
-
-    const plan = await TravelPlan.findByPk(id);
-    if (!plan) return sendResponse(res, 404, false, "Travel plan not found");
-
-    if (plan.tradesmanId !== userId)
+    const plan = await TravelPlan.findByPk(req.params.id);
+    if (!plan) return sendResponse(res, 404, false, "Plan not found");
+    if (plan.tradesmanId !== req.user.id)
       return sendResponse(res, 403, false, "Not allowed");
 
     await plan.destroy();
-
-    return sendResponse(res, 200, true, "Travel plan deleted");
+    return sendResponse(res, 200, true, "Deleted");
   } catch (err) {
-    console.error(err);
+    return sendResponse(res, 500, false, "Server error");
+  }
+};
+
+// ================= TRADESMAN PROFILE =================
+exports.getTradesmanProfile = async (req, res) => {
+  try {
+    const { tradesmanId } = req.params;
+
+    const tradesman = await User.findOne({
+      where: { id: tradesmanId, role: "tradesman" },
+      attributes: ["id", "name", "profileImage"],
+    });
+
+    if (!tradesman)
+      return sendResponse(res, 404, false, "Tradesman not found");
+
+    const travelPlan = await TravelPlan.findOne({
+      where: { tradesmanId, status: "open" },
+      order: [["createdAt", "DESC"]],
+    });
+
+    const ratingAgg = await Review.findOne({
+      where: { toUserId: tradesmanId },
+      attributes: [
+        [fn("AVG", col("rating")), "avgRating"],
+        [fn("COUNT", col("id")), "reviewCount"],
+      ],
+      raw: true,
+    });
+
+    const response = {
+      id: tradesman.id,
+      name: tradesman.name,
+      profileImage: tradesman.profileImage,
+    
+      rating: ratingAgg?.avgRating
+        ? Number(ratingAgg.avgRating).toFixed(1)
+        : "0.0",
+    
+      reviewCount: ratingAgg?.reviewCount || 0,
+    
+      location: travelPlan
+        ? {
+            current: travelPlan.currentLocation || null,
+            start: travelPlan.startLocation,
+            destination: travelPlan.destination,
+            stops: travelPlan.allowStops ? travelPlan.stops : []
+          }
+        : null,
+    
+      availability: travelPlan ? "Available Today" : "Not Available",
+      priceRange: travelPlan?.priceRange || null
+    };
+    
+
+    return sendResponse(res, 200, true, "Profile fetched", response);
+  } catch (err) {
+    console.error("getTradesmanProfile error:", err);
     return sendResponse(res, 500, false, "Server error");
   }
 };
