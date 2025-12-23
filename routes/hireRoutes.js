@@ -1,27 +1,33 @@
 const express = require("express");
 const router = express.Router();
 const hireController = require("../controllers/hireController");
+const clientBookingController = require("../controllers/clientBookingController");
+const reviewController = require("../controllers/reviewController");
 const { verifyToken } = require("../middlewares/authMiddleware");
 
-// 1. Client → send hire request
+// Client → send hire request
 router.post("/request", verifyToken, hireController.requestHire);
 
-// 2. Tradesman → accept / reject
+// Tradesman → accept / reject
 router.post("/respond", verifyToken, hireController.respondHire);
 
-// 3. Tradesman → request job completion
+// Tradesman → request job completion
 router.post("/request-complete", verifyToken, hireController.requestJobCompletion);
 
-// 4. Client → YES / NO completion
+// Client → confirm YES / NO
 router.post("/confirm-complete", verifyToken, hireController.confirmJobCompletion);
 
-// 5. Chat → latest hire status
+// ✅ Client → check pending completion (FIXED)
+router.get("/pending-complete", verifyToken, hireController.getPendingCompletionStatus);
+
+// Chat → latest hire status
 router.get("/status/:userId", verifyToken, hireController.getHireStatusForConversation);
 
-// 6. Client → pending completion check
-router.get("/pending-complete/:hireId", verifyToken, hireController.getPendingCompletionStatus);
-
-// 7. My jobs
+// My jobs
 router.get("/my", verifyToken, hireController.getMyJobs);
+
+router.get("/client/bookings", verifyToken, clientBookingController.getClientBookings);
+
+router.post("/review", verifyToken, reviewController.addReview);
 
 module.exports = router;

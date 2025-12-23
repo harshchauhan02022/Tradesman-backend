@@ -1,14 +1,11 @@
 const Hire = require("../models/hireModel");
 const User = require("../models/User");
 const { Op } = require("sequelize");
-const { io, onlineUsers } = require("../server");
 
 const sendResponse = (res, status, success, message, data = null) =>
   res.status(status).json({ success, message, data });
 
-/* =========================
-   1️⃣ Client → Hire Request
-========================= */
+/* 1️⃣ Client → Hire Request */
 exports.requestHire = async (req, res) => {
   try {
     const clientId = req.user.id;
@@ -17,40 +14,38 @@ exports.requestHire = async (req, res) => {
     if (!tradesmanId)
       return sendResponse(res, 400, false, "tradesmanId required");
 
-    const existing = await Hire.findOne({
-      where: { clientId, tradesmanId, status: "pending" }
+    // ✅ BLOCK multiple active hires
+    const activeHire = await Hire.findOne({
+      where: {
+        clientId,
+        tradesmanId,
+        status: { [Op.in]: ["pending", "accepted"] }
+      }
     });
 
-    if (existing)
-      return sendResponse(res, 400, false, "Pending request already exists");
+    if (activeHire)
+      return sendResponse(
+        res,
+        400,
+        false,
+        "Active hire already exists with this tradesman"
+      );
 
     const hire = await Hire.create({
       clientId,
       tradesmanId,
       jobDescription,
-      status: "pending"
+      status: "pending",
+      requestCompletion: false
     });
 
-    const traderSocket = onlineUsers[tradesmanId];
-    if (traderSocket) {
-      io.to(traderSocket).emit("hire_request", {
-        hireId: hire.id,
-        clientId,
-        jobDescription
-      });
-    }
-
     return sendResponse(res, 201, true, "Hire request sent", hire);
-
   } catch (err) {
-    console.error("requestHire:", err);
     return sendResponse(res, 500, false, err.message);
   }
 };
 
-/* =========================
-   2️⃣ Tradesman → Accept / Reject
-========================= */
+/* 2️⃣ Tradesman → Accept / Reject */
 exports.respondHire = async (req, res) => {
   try {
     const tradesmanId = req.user.id;
@@ -59,74 +54,48 @@ exports.respondHire = async (req, res) => {
     if (!hireId || !["accept", "reject"].includes(action))
       return sendResponse(res, 400, false, "Invalid action");
 
-    const hire = await Hire.findOne({
-      where: { id: hireId, tradesmanId }
-    });
-
-    if (!hire)
-      return sendResponse(res, 404, false, "Hire not found");
+    const hire = await Hire.findOne({ where: { id: hireId, tradesmanId } });
+    if (!hire) return sendResponse(res, 404, false, "Hire not found");
 
     hire.status = action === "accept" ? "accepted" : "rejected";
     await hire.save();
 
-    const clientSocket = onlineUsers[hire.clientId];
-    if (clientSocket) {
-      io.to(clientSocket).emit("hire_response", {
-        hireId: hire.id,
-        status: hire.status
-      });
-    }
-
     return sendResponse(res, 200, true, "Hire updated", hire);
-
   } catch (err) {
-    console.error("respondHire:", err);
     return sendResponse(res, 500, false, err.message);
   }
 };
 
-/* =========================
-   3️⃣ Tradesman → Request Completion
-========================= */
+/* 3️⃣ Tradesman → Request Completion */
 exports.requestJobCompletion = async (req, res) => {
   try {
     const tradesmanId = req.user.id;
     const { hireId } = req.body;
 
-    if (!hireId)
-      return sendResponse(res, 400, false, "hireId required");
-
     const hire = await Hire.findOne({
-      where: { id: hireId, tradesmanId }
+      where: {
+        id: hireId,
+        tradesmanId,
+        status: "accepted"
+      }
     });
 
     if (!hire)
-      return sendResponse(res, 404, false, "Hire not found");
+      return sendResponse(res, 404, false, "Active hire not found");
 
-    if (hire.status !== "accepted")
-      return sendResponse(res, 400, false, "Job not accepted");
+    if (hire.requestCompletion)
+      return sendResponse(res, 400, false, "Already requested");
 
     hire.requestCompletion = true;
     await hire.save();
 
-    const clientSocket = onlineUsers[hire.clientId];
-    if (clientSocket) {
-      io.to(clientSocket).emit("job_complete_request", {
-        hireId: hire.id
-      });
-    }
-
     return sendResponse(res, 200, true, "Completion request sent");
-
   } catch (err) {
-    console.error("requestJobCompletion:", err);
     return sendResponse(res, 500, false, err.message);
   }
 };
 
-/* =========================
-   4️⃣ Client → YES / NO
-========================= */
+/* 4️⃣ Client → YES / NO */
 exports.confirmJobCompletion = async (req, res) => {
   try {
     const clientId = req.user.id;
@@ -136,66 +105,63 @@ exports.confirmJobCompletion = async (req, res) => {
       return sendResponse(res, 400, false, "confirm must be boolean");
 
     const hire = await Hire.findOne({
-      where: { id: hireId, clientId }
+      where: {
+        id: hireId,
+        clientId,
+        status: "accepted",
+        requestCompletion: true
+      }
     });
 
     if (!hire)
-      return sendResponse(res, 404, false, "Hire not found");
-
-    if (!hire.requestCompletion)
-      return sendResponse(res, 400, false, "No pending request");
+      return sendResponse(res, 404, false, "No pending request found");
 
     if (!confirm) {
       hire.requestCompletion = false;
       await hire.save();
-      return sendResponse(res, 200, true, "Completion denied");
+      return sendResponse(res, 200, true, "Completion rejected");
     }
 
     hire.status = "completed";
     hire.requestCompletion = false;
     await hire.save();
 
-    const traderSocket = onlineUsers[hire.tradesmanId];
-    if (traderSocket) {
-      io.to(traderSocket).emit("job_completed", {
-        hireId: hire.id
-      });
-    }
-
     return sendResponse(res, 200, true, "Job completed", hire);
-
   } catch (err) {
-    console.error("confirmJobCompletion:", err);
     return sendResponse(res, 500, false, err.message);
   }
 };
 
-/* =========================
-   5️⃣ Pending completion check
-========================= */
+/* 5️⃣ ✅ Client → Check Pending Completion (FIXED) */
 exports.getPendingCompletionStatus = async (req, res) => {
   try {
     const clientId = req.user.id;
-    const { hireId } = req.params;
 
     const hire = await Hire.findOne({
-      where: { id: hireId, clientId },
-      attributes: ["id", "status", "requestCompletion"]
+      where: {
+        clientId,
+        status: "accepted",
+        requestCompletion: true
+      },
+      order: [["createdAt", "DESC"]]
     });
 
     if (!hire)
-      return sendResponse(res, 404, false, "Hire not found");
+      return sendResponse(res, 200, true, "No pending request", {
+        pending: false
+      });
 
-    return sendResponse(res, 200, true, "Status", hire);
-
+    return sendResponse(res, 200, true, "Pending completion request", {
+      pending: true,
+      hireId: hire.id,
+      tradesmanId: hire.tradesmanId
+    });
   } catch (err) {
     return sendResponse(res, 500, false, err.message);
   }
 };
 
-/* =========================
-   6️⃣ Chat hire status
-========================= */
+/* 6️⃣ Chat → Latest hire */
 exports.getHireStatusForConversation = async (req, res) => {
   try {
     const me = req.user.id;
@@ -212,23 +178,26 @@ exports.getHireStatusForConversation = async (req, res) => {
     });
 
     return sendResponse(res, 200, true, "Hire status", hire);
-
   } catch (err) {
     return sendResponse(res, 500, false, err.message);
   }
 };
 
-/* =========================
-   7️⃣ My Jobs
-========================= */
+/* 7️⃣ My Jobs */
 exports.getMyJobs = async (req, res) => {
   try {
     const { id, role } = req.user;
+    const filter = (req.query.filter || "all").toLowerCase();
 
     const where =
       role === "client"
         ? { clientId: id }
         : { tradesmanId: id };
+
+    if (filter === "active")
+      where.status = { [Op.in]: ["pending", "accepted"] };
+    else if (filter === "completed")
+      where.status = "completed";
 
     const jobs = await Hire.findAll({
       where,
@@ -240,7 +209,6 @@ exports.getMyJobs = async (req, res) => {
     });
 
     return sendResponse(res, 200, true, "Jobs fetched", jobs);
-
   } catch (err) {
     return sendResponse(res, 500, false, err.message);
   }

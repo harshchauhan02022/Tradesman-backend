@@ -9,14 +9,16 @@ dotenv.config({ path: './config/config.env' });
 
 require('./config/passport');
 
-const adminRoutes = require('./routes/adminRoutes');
+const adminRoutes = require('./routes/AdminRoute/adminRoutes');
 const userRoutes = require('./routes/userRoutes');
 const googleRoutes = require('./routes/googleRoutes');
 const hireRoutes = require('./routes/hireRoutes');
 const locationRoutes = require("./routes/locationRoutes");
 const subscriptionRoutes = require("./routes/subscriptionRoutes");
 const chatRoutes = require('./routes/chatRoutes');
-const adminApprovalRoutes = require('./routes/adminApprovalRoutes');
+const adminApprovalRoutes = require('./routes/AdminRoute/adminApprovalRoutes');
+const adminDashboardRoutes = require('./routes/AdminRoute/adminDashboardRoutes')
+const adminReportsRoutes = require('./routes/AdminRoute/adminReportsRoutes')
 
 const app = express();
 
@@ -44,6 +46,8 @@ app.use('/api/locations', locationRoutes);
 app.use("/api/subscriptions", subscriptionRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/admin', adminApprovalRoutes);
+app.use("/api/admin/dashboard", adminDashboardRoutes);
+app.use("/api/admin", adminReportsRoutes)
 
 app.get('/', (req, res) => {
   res.send('✅ Tradesman Travel App API is running...');

@@ -1,6 +1,6 @@
-// models/UserSubscription.js
 const { DataTypes } = require("sequelize");
 const sequelize = require("../config/db");
+
 const User = require("./User");
 const SubscriptionPlan = require("./SubscriptionPlan");
 
@@ -16,13 +16,11 @@ const UserSubscription = sequelize.define(
     userId: {
       type: DataTypes.INTEGER,
       allowNull: false,
-      references: { model: "Users", key: "id" },
     },
 
     planId: {
       type: DataTypes.INTEGER,
       allowNull: false,
-      references: { model: "subscription_plans", key: "id" },
     },
 
     startDate: {
@@ -46,10 +44,30 @@ const UserSubscription = sequelize.define(
   }
 );
 
-UserSubscription.belongsTo(User, { foreignKey: "userId", as: "user" });
-User.hasMany(UserSubscription, { foreignKey: "userId", as: "subscriptions" });
+/* =======================
+   ✅ Associations (ONLY ONCE)
+======================= */
 
-UserSubscription.belongsTo(SubscriptionPlan, { foreignKey: "planId", as: "plan" });
-SubscriptionPlan.hasMany(UserSubscription, { foreignKey: "planId", as: "userSubscriptions" });
+// user_subscriptions → users
+UserSubscription.belongsTo(User, {
+  foreignKey: "userId",
+  as: "user",
+});
+
+User.hasMany(UserSubscription, {
+  foreignKey: "userId",
+  as: "subscriptions",
+});
+
+// user_subscriptions → subscription_plans
+UserSubscription.belongsTo(SubscriptionPlan, {
+  foreignKey: "planId",
+  as: "plan",
+});
+
+SubscriptionPlan.hasMany(UserSubscription, {
+  foreignKey: "planId",
+  as: "userSubscriptions",
+});
 
 module.exports = UserSubscription;
