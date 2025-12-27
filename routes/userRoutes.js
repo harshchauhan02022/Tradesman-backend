@@ -4,6 +4,7 @@ const userController = require('../controllers/userController');
 const { verifyToken } = require('../middlewares/authMiddleware');
 const { upload, convertToJpg } = require('../middlewares/uploadMiddleware');
 
+
 // Public Routes
 router.post(
   '/register',
@@ -43,6 +44,21 @@ router.put(
   convertToJpg,
   userController.updateProfile
 );
+
+router.put(
+  "/profile/update",
+  verifyToken,
+  upload.fields([
+    { name: "profileImage", maxCount: 1 },
+    { name: "portfolioPhotos", maxCount: 10 },
+  ]),
+  userController.updateTradesmanProfile
+);
+router.post(
+  "/tradesmen/filter",
+  userController.filterNearbyTradesmen
+);
+
 router.delete('/:id', verifyToken, userController.deleteUser);
 
 // 🔹 Password Reset

@@ -37,7 +37,19 @@ const TradesmanDetails = sequelize.define(
 );
 
 // relations
-User.hasOne(TradesmanDetails, { foreignKey: "userId", as: "TradesmanDetail" });
-TradesmanDetails.belongsTo(User, { foreignKey: "userId" });
+// User.hasOne(TradesmanDetails, { foreignKey: "userId", as: "TradesmanDetail" });
+// TradesmanDetails.belongsTo(User, { foreignKey: "userId" });
+
+// relations
+User.hasOne(TradesmanDetails, {
+  foreignKey: "userId",
+  as: "TradesmanDetail"
+});
+
+TradesmanDetails.belongsTo(User, {
+  foreignKey: "userId",
+  as: "user" // 🔥 YE ADD KARO
+});
+
 
 module.exports = TradesmanDetails;

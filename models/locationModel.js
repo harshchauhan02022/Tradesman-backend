@@ -15,11 +15,22 @@ const TravelPlan = sequelize.define(
     tradesmanId: {
       type: DataTypes.INTEGER,
       allowNull: false,
-      references: { model: "Users", key: "id" },
     },
 
     currentLocation: {
       type: DataTypes.STRING,
+      allowNull: true,
+    },
+
+    // ✅ NEW
+    latitude: {
+      type: DataTypes.DOUBLE,
+      allowNull: true,
+    },
+
+    // ✅ NEW
+    longitude: {
+      type: DataTypes.DOUBLE,
       allowNull: true,
     },
 

@@ -10,7 +10,11 @@ router.post("/", verifyToken, locationController.createTravelPlan);
 router.get("/my", verifyToken, locationController.getMyTravelPlans);
 
 // Update travel plan
-router.put("/:id", verifyToken, locationController.updateTravelPlan);
+router.put(
+    "/my",
+    verifyToken,
+    locationController.updateMyTravelPlan
+);
 
 // Delete travel plan
 router.delete("/:id", verifyToken, locationController.deleteTravelPlan);
