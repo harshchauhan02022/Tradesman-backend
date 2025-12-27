@@ -519,14 +519,8 @@ exports.changePassword = async (req, res) => {
 
 exports.getMeProfile = async (req, res) => {
   try {
-    const userId = req.user?.id;
-
-    if (!userId) {
-      return sendResponse(res, 401, false, "Unauthorized");
-    }
-
     const user = await User.findOne({
-      where: { id: userId },
+      where: { id: req.user.id },
       include: [{ model: TradesmanDetails, as: "TradesmanDetail" }],
     });
 
@@ -534,9 +528,11 @@ exports.getMeProfile = async (req, res) => {
       return sendResponse(res, 404, false, "User not found");
     }
 
+    // 🔥 RAW SEQUELIZE OBJECT RETURN
     return sendResponse(res, 200, true, "User fetched", user);
+
   } catch (error) {
-    console.error("Fetch Me Error:", error);
+    console.error(error);
     return sendResponse(res, 500, false, "Server error");
   }
 };
@@ -793,18 +789,17 @@ exports.updateTradesmanProfile = async (req, res) => {
       portfolioDescription,
     } = req.body;
 
-    /* ================= FILES (AFTER SHARP) ================= */
-    // ⚠️ sharp middleware file.filename set karta hai
-    const profileImageFile = req.files?.profileImage?.[0];
+    /* ================= FILES ================= */
+    const profileImageFile = req.files?.profileImage?.[0] || null;
     const portfolioFiles = req.files?.portfolioPhotos || [];
 
-    /* ================= UPDATE USER TABLE ================= */
+    /* ================= UPDATE USER ================= */
     if (name !== undefined) user.name = name;
     if (mobile !== undefined) user.mobile = mobile;
 
-    // ✅ PROFILE IMAGE FIX
-    if (profileImageFile) {
-      user.profileImage = `/uploads/profile/${profileImageFile.filename}`;
+    // ✅ ONLY filename (NO /uploads/)
+    if (profileImageFile?.filename) {
+      user.profileImage = profileImageFile.filename;
     }
 
     await user.save();
@@ -821,12 +816,10 @@ exports.updateTradesmanProfile = async (req, res) => {
 
     // ❌ licenseDocument update NOT allowed
 
-    // ✅ PORTFOLIO IMAGES FIX (MySQL compatible)
-    if (portfolioFiles.length) {
-      tradesman.portfolioPhotos = JSON.stringify(
-        portfolioFiles.map(
-          (f) => `/uploads/portfolio/${f.filename}`
-        )
+    // ✅ PORTFOLIO PHOTOS → ONLY filenames, NO stringify
+    if (portfolioFiles.length > 0) {
+      tradesman.portfolioPhotos = portfolioFiles.map(
+        (f) => f.filename
       );
     }
 
@@ -838,7 +831,7 @@ exports.updateTradesmanProfile = async (req, res) => {
         id: user.id,
         name: user.name,
         mobile: user.mobile,
-        profileImage: user.profileImage,
+        profileImage: user.profileImage, // e.g. "profileImage-176562030141.jpg"
       },
       tradesman: {
         tradeType: tradesman.tradeType,
@@ -847,11 +840,10 @@ exports.updateTradesmanProfile = async (req, res) => {
         portfolioDescription: tradesman.portfolioDescription,
         licenseNumber: tradesman.licenseNumber,
         licenseExpiry: tradesman.licenseExpiry,
-        portfolioPhotos: tradesman.portfolioPhotos
-          ? JSON.parse(tradesman.portfolioPhotos)
-          : [],
+        portfolioPhotos: tradesman.portfolioPhotos || [], // ["img1.jpg","img2.jpg"]
       },
     });
+
   } catch (error) {
     console.error("Update Tradesman Profile Error:", error);
     return sendResponse(res, 500, false, "Server error");

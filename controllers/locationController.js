@@ -137,8 +137,8 @@ exports.updateMyTravelPlan = async (req, res) => {
 
     const {
       currentLocation,
-      latitude,        // ✅ NEW
-      longitude,       // ✅ NEW
+      latitude,
+      longitude,
       startLocation,
       destination,
       priceRange,
@@ -149,21 +149,32 @@ exports.updateMyTravelPlan = async (req, res) => {
       status,
     } = req.body;
 
+    // ---------- BASIC FIELDS ----------
     if (currentLocation !== undefined) plan.currentLocation = currentLocation;
-    if (latitude !== undefined) plan.latitude = latitude;       // ✅
-    if (longitude !== undefined) plan.longitude = longitude;    // ✅
+    if (latitude !== undefined) plan.latitude = latitude;
+    if (longitude !== undefined) plan.longitude = longitude;
     if (startLocation !== undefined) plan.startLocation = startLocation;
     if (destination !== undefined) plan.destination = destination;
     if (priceRange !== undefined) plan.priceRange = priceRange;
-    if (allowStops !== undefined) plan.allowStops = allowStops;
     if (status !== undefined) plan.status = status;
-
-    if (stops !== undefined) {
-      plan.stops = allowStops ? parseStops(stops) : null;
-    }
-
     if (startDate !== undefined) plan.startDate = startDate;
     if (endDate !== undefined) plan.endDate = endDate;
+
+    // ---------- STOPS FIX ----------
+    if (allowStops !== undefined) {
+      plan.allowStops = allowStops;
+
+      if (allowStops === true) {
+        plan.stops = parseStops(stops);
+      } else {
+        plan.stops = null;
+      }
+    } else if (stops !== undefined) {
+      // allowStops not sent → use existing value
+      if (plan.allowStops) {
+        plan.stops = parseStops(stops);
+      }
+    }
 
     await plan.save();
 
